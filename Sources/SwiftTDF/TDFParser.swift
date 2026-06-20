@@ -60,7 +60,28 @@ public enum TDFParser {
             throw TDFError.tooManyFonts(count: fonts.count)
         }
 
+        // Empty-collection round-trip: the writer synthesizes a placeholder
+        // font (empty name, block type, no glyphs) for empty collections so
+        // the output is still a structurally valid TDFONTS.EXE file. Reverse
+        // that here so `parse(encode(.empty)) == .empty` — without this the
+        // round-trip would yield a 1-font collection containing the
+        // placeholder.
+        if fonts.count == 1, isEmptyPlaceholder(fonts[0]) {
+            return TDFFontCollection.empty
+        }
+
         return TDFFontCollection(fonts: fonts)
+    }
+
+    /// True for the writer's synthesized "empty collection" placeholder
+    /// font: zero-length name, block type, no defined glyphs, default
+    /// letter spacing. Matched here so the parser can reduce the canonical
+    /// empty-file encoding back to ``TDFFontCollection/empty``.
+    private static func isEmptyPlaceholder(_ font: TDFFont) -> Bool {
+        return font.name.isEmpty
+            && font.type == .block
+            && font.letterSpacing == 0
+            && font.characters.isEmpty
     }
 
     // MARK: - File header
