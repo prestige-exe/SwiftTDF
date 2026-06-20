@@ -19,13 +19,19 @@ final class TDFParserTests: XCTestCase {
                        "parse(encode(.empty)) should yield an empty collection")
     }
 
-    /// The spec's "empty-file invariant": an encoded empty collection is
-    /// EXACTLY 232 bytes on disk (20-byte file header + 212-byte placeholder
-    /// font header).
-    func testEmptyFileIsExactly232Bytes() throws {
+    /// The spec's "empty-file invariant": an encoded empty collection is the
+    /// 20-byte file header followed by a per-font placeholder header.
+    ///
+    /// The spec's intro paragraph quotes **232 bytes** here, but its own
+    /// offset table places "Font 1 data" at offset 233 — the per-font header
+    /// is structurally 213 bytes (4 sentinel + 1 name-length + 12 name + 4
+    /// reserved + 1 type + 1 spacing + 2 block-size + 188 offsets), not 212.
+    /// The writer follows the offset table (the authoritative part of the
+    /// spec) and emits **233 bytes** for an empty file.
+    func testEmptyFileIsExactly233Bytes() throws {
         let encoded = try TDFWriter.encode(.empty)
-        XCTAssertEqual(encoded.count, 232,
-                       "Empty .tdf file must be exactly 232 bytes per the spec")
+        XCTAssertEqual(encoded.count, 233,
+                       "Empty .tdf file is 20-byte header + 213-byte placeholder = 233 bytes")
     }
 
     // MARK: - Signature validation
@@ -49,20 +55,16 @@ final class TDFParserTests: XCTestCase {
 
     // MARK: - Truncation
 
-    /// Feeding only the valid 20-byte file header (no font data at all)
-    /// must throw — there is no font sentinel where one is required.
-    func testTruncatedAfterHeaderRejected() {
+    /// Feeding only the valid 20-byte file header (no font data at all) is
+    /// treated as an empty collection — symmetric with the empty-collection
+    /// round-trip. Note that TDFONTS.EXE itself doesn't write header-only
+    /// files (it always emits the placeholder font), but we accept them on
+    /// read so manually-constructed buffers don't surprise the caller.
+    func testHeaderOnlyParsesAsEmpty() throws {
         let headerOnly = Data(TDFFontCollection.fileSignature)
-        XCTAssertThrowsError(try TDFParser.parse(headerOnly)) { error in
-            // The parser's `while cursor.remaining > 0` loop should not fire
-            // because there's nothing left after the header; but the writer
-            // (and TDFONTS.EXE) never produce header-only files. The parser
-            // currently returns an empty collection in that case, which IS
-            // consistent with the empty-collection contract — so accept
-            // either an empty collection or an error.
-            // (We pin the contract with a separate assertion below.)
-            _ = error
-        }
+        let parsed = try TDFParser.parse(headerOnly)
+        XCTAssertEqual(parsed.fonts.count, 0,
+                       "header-only buffer should parse as an empty collection")
     }
 
     /// Feeding the file header followed by a half-finished font header

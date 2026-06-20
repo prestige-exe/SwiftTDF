@@ -9,12 +9,19 @@ final class TDFWriterTests: XCTestCase {
 
     // MARK: - Empty-file invariant
 
-    /// An empty collection must encode to exactly 232 bytes on disk per the
-    /// `Reference/TDF_SPECIFICATION.md` invariant.
-    func testEmptyCollectionEncodesTo232Bytes() throws {
+    /// An empty collection must encode to exactly 233 bytes on disk: a
+    /// 20-byte file header followed by a structurally-required 213-byte
+    /// per-font placeholder header.
+    ///
+    /// The spec's intro paragraph quotes 232 bytes here, but its own offset
+    /// table places "Font 1 data" at offset 233 — the placeholder header is
+    /// 213 bytes (4 sentinel + 1 name-length + 12 name + 4 reserved + 1
+    /// type + 1 spacing + 2 block-size + 188 offsets), not 212. The writer
+    /// follows the offset table.
+    func testEmptyCollectionEncodesTo233Bytes() throws {
         let bytes = try TDFWriter.encode(.empty)
-        XCTAssertEqual(bytes.count, 232,
-                       "Empty .tdf file must be exactly 232 bytes per spec")
+        XCTAssertEqual(bytes.count, 233,
+                       "Empty .tdf file is 20-byte header + 213-byte placeholder")
     }
 
     // MARK: - Name truncation
