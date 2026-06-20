@@ -72,7 +72,9 @@ Each cell is **2 bytes**:
 A `0x0D` byte (Carriage Return) ends the current line.
 
 ### Glyph terminator
-A `0x00` (NUL) byte after a 0x0D ends the current glyph.
+A `0x00` (NUL) byte at any **cell boundary** ends the current glyph. The Roy/SAC spec phrases this as "NUL after 0x0D", but TDFONTS.EXE in practice writes the terminator at the end of the last cell of the last line with **no trailing CR**. The bare-NUL form is observed in the canonical TDFONTS.TDF distribution's `ColorRounded` font and is the norm for real-world color fonts; the CR-then-NUL form is also accepted (the CR closes the last line, then NUL terminates from the now-empty cell boundary). A parser must not require a preceding 0x0D to recognise the terminator.
+
+CP437 `0x00` is not a drawable character, so a bare NUL at a cell boundary is unambiguously the terminator — the spec's earlier warning about "0x00 is a legal attribute byte" refers to the SECOND byte of a color cell (the attribute), which is consumed inside the cell and never sits at a cell boundary.
 
 ### Empty trailing cells
 If a line ends before reaching the max width, the remaining cells on that line are **transparent** (not rendered). This is normal — glyphs are not required to be rectangular.

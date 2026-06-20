@@ -215,28 +215,36 @@ public enum TDFParser {
         let blockEnd = block.count
         var lines: [TDFLine] = []
         var currentCells: [TDFCell] = []
-        // Tracks whether the *previous* byte we consumed was a 0x0D, so we
-        // can recognize a NUL terminator that immediately follows a CR. The
-        // spec terminator is "0x00 after a 0x0D"; a NUL anywhere else is
-        // either content (color attribute) or signals premature end of glyph
-        // when we run out of buffer.
-        var justEndedLine = false
 
+        // The loop top is always at a CELL BOUNDARY (or right after a CR
+        // line break). At a cell boundary, a 0x00 byte is the glyph
+        // terminator — period. The Roy/SAC spec phrases this as "NUL after
+        // 0x0D", but TDFONTS.EXE in practice emits the terminator at the
+        // end of the last cell's data with NO trailing CR (observed in the
+        // canonical TDFONTS.TDF "ColorRounded" font and others). Requiring
+        // a preceding CR makes the parser walk straight past the real
+        // terminator, mis-stride color cells, and eventually trip the
+        // mid-cell bounds check on the first glyph of every such font.
+        //
+        // 0x00 cannot be confused with cell content here:
+        //   - For block/outline fonts CP437 0x00 is not a drawable code.
+        //   - For color fonts the cell's CHARACTER byte is at the cell
+        //     boundary; a 0x00 there would also be a non-drawable NUL char.
+        //     The legitimate "0x00 is a legal attribute" case in the spec
+        //     refers to the SECOND byte of a color cell, which is consumed
+        //     inside the .color switch arm below and never re-enters this
+        //     check.
         while position < blockEnd {
             let byte = block[position]
 
-            if justEndedLine {
-                // We just consumed a CR. A NUL here ends the glyph.
-                if byte == 0x00 {
-                    position += 1
-                    return finalize(
-                        maxWidth: maxWidth,
-                        maxHeight: maxHeight,
-                        lines: &lines,
-                        currentCells: &currentCells
-                    )
-                }
-                justEndedLine = false
+            if byte == 0x00 {
+                position += 1
+                return finalize(
+                    maxWidth: maxWidth,
+                    maxHeight: maxHeight,
+                    lines: &lines,
+                    currentCells: &currentCells
+                )
             }
 
             if byte == 0x0D {
@@ -247,7 +255,6 @@ public enum TDFParser {
                     into: &lines
                 )
                 position += 1
-                justEndedLine = true
                 continue
             }
 
